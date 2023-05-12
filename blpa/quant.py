@@ -3,7 +3,7 @@ import tensorflow as tf
 import os
 
 
-sopath=os.path.abspath(os.path.dirname(__file__))+'/ops/quant.so'
+sopath = f'{os.path.abspath(os.path.dirname(__file__))}/ops/quant.so'
 try:
     mod = tf.load_op_library(sopath)
 except:
@@ -11,7 +11,7 @@ except:
     print("WARNING: COULD NOT LOAD CUDA LIBRARY")
 
 def cu_quant(qtype,act,bias):
-    assert qtype == 4 or qtype==8
+    assert qtype in [4, 8]
 
     vshp = act.get_shape().as_list()
     if qtype==8:
@@ -28,18 +28,14 @@ def cu_quant(qtype,act,bias):
 
 
 def tf_quant(qtype,act,bias):
-    assert qtype==4 or qtype==8
+    assert qtype in [4, 8]
 
-    if qtype == 4:
-        nbins = 16
-    else:
-        nbins = 256
-
+    nbins = 16 if qtype == 4 else 256
     shift = tf.maximum(1.0,nbins//2-tf.floor(bias*nbins/6.0))
 
     outs = tf.floor((act-1e-6)*nbins/6.0)
     outs = tf.cast(tf.clip_by_value(outs+shift,0,nbins-1),tf.uint8)
-            
+
     # Pack for 4-bit
     if nbins == 16:
         bsz = outs.get_shape()[0]
@@ -62,12 +58,7 @@ def tf_quant(qtype,act,bias):
 
     return sOp, outs, Rm 
 
-if mod is not None:
-    quant = cu_quant
-else:
-    quant = tf_quant
-
-
+quant = cu_quant if mod is not None else tf_quant
 if __name__ == "__main__":
     import numpy as np
 

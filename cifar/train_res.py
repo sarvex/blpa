@@ -60,16 +60,17 @@ rs = np.random.RandomState(opts.seed)
 origiter = 0
 if os.path.isfile(saveloc):
     origiter = g.load(saveloc)
-    for k in range( (origiter+ESIZE-1) // ESIZE):
+    for _ in range( (origiter+ESIZE-1) // ESIZE):
         idx = rs.permutation(len(train_lb))
-    mprint("Restored to iteration %d" % origiter)    
+    mprint("Restored to iteration %d" % origiter)
 niter = origiter    
-    
 
-avg_loss = 0.; avg_acc = 0.
+
+avg_loss = 0.
+avg_acc = 0.
 while niter < dset.MAXITER+1:
     lr = dset.get_lr(niter)
-    
+
     if niter % dset.VALITER == 0:
         vacc = 0.; vloss = 0.; viter = 0
         for b in range(0,len(val_lb)-BSZ+1,BSZ):
@@ -87,11 +88,11 @@ while niter < dset.MAXITER+1:
     b = batches[niter % ESIZE]
 
     inp_b = dset.augment(train_im[idx[b:b+BSZ],...])
-        
+
     acc,loss = g.forward(inp_b,train_lb[idx[b:b+BSZ],...])
     g.backward(lr)
     niter = niter+1
-    
+
     avg_loss = avg_loss + loss; avg_acc = avg_acc + acc;
     if niter % DISPITER == 0:
         avg_loss = avg_loss / DISPITER; avg_acc = avg_acc / DISPITER

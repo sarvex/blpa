@@ -107,7 +107,7 @@ class Layer:
             graph.weights.append(bias)
             graph.grads.append(bgrad)
             out = out + bias
-        
+
         ### Save + Handle ReLUs
         self.btop = None
 
@@ -126,14 +126,12 @@ class Layer:
 
             out = tf.nn.relu(out)
             out = tf.nn.max_pool(out,[1,3,3,1],[1,2,2,1],'SAME')
-            
-        # Last layer
+
         elif self == graph.layers[-1]:
             fsave += [tf.assign(scratch2[:np.prod(self.inSz)],tf.reshape(out,[-1])).op]
             var = tf.reshape(scratch2[:np.prod(self.inSz)],out.get_shape())
-                
-        # Quantization
-        elif self.nldef.bn and (graph.qtype == 4 or graph.qtype == 8):
+
+        elif self.nldef.bn and graph.qtype in [4, 8]:
             assert self.nldef.relu 
 
             sOp, outs, self.Rm = q.quant(graph.qtype,out/cscale,bias/cscale)
@@ -143,26 +141,25 @@ class Layer:
             self.btop = tf.nn.relu(outs*cscale)
             out = tf.nn.relu(out)
 
-            
-        # No Quantization
+
         else:
             var = tf.Variable(tf.zeros(out.get_shape(),dtype=DT))
             fsave += [tf.assign(var,out).op]
-                
+
 
         if self.btop is None:
             if self.nldef.bn:
                 self.btop0 = (var-bias)/cscale
                 self.btop1 = self.btop0
-                
+
             if self.nldef.relu:
                 self.btop = tf.nn.relu(var)
                 self.Rm = tf.cast(var > 0,dtype=DT)
                 out = tf.nn.relu(out)
             else:
                 self.btop = var
-        
-        
+
+
         ######### Handle res_out
         if self.nldef.res_out is not None:
             graph.rsz = out.get_shape().as_list()
@@ -179,7 +176,7 @@ class Layer:
             sq = np.sqrt(1.0 / np.float32(self.ksz*self.ksz*self.inCh))
         else:
             sq = np.sqrt(2.0 / np.float32(self.ksz*self.ksz*self.inCh))
-            
+
         kernel = tf.random_normal(kshp,stddev=sq,dtype=DT)
         kernel = tf.Variable(kernel)
         kgrad = tf.Variable(tf.zeros(kshp,dtype=DT))
@@ -202,11 +199,11 @@ class Layer:
         ##############################################################################
         ingrad = self.ftop # Same shape loading from scratch
         bsave = []
-        
+
         inp = self.btop
         if self.nldef.avpool:
             inp = tf.reduce_mean(inp,[1,2],True)
-            
+
         kg = tf.nn.conv2d_backprop_filter(inp,kshp,ingrad,[1,self.stride,self.stride,1],self.pad)
         kg += graph.WD*kernel
         bsave += [tf.assign(kgrad,kg).op]
@@ -214,7 +211,7 @@ class Layer:
         if not self.prev.back:
             self.bOp = tf.group(*bsave)
             return
-        
+
         if self.nldef.avpool:
             ingrad = tf.nn.conv2d_backprop_input([self.inSz[0],1,1,self.inSz[3]],kernel,ingrad,
                                                  [1,1,1,1],'VALID') /  np.float32(self.inSz[1]*self.inSz[2])
@@ -230,7 +227,7 @@ class Layer:
 
         if self.nldef.maxpool:
             ingrad = max_pool_grad(self.premp,self.btop,ingrad,[1,3,3,1],[1,2,2,1],'SAME')
-            
+
         if self.nldef.relu:
             ingrad *= self.Rm
         bsave += [tf.assign(bgrad, tf.reduce_sum(ingrad,[0,1,2])).op]
@@ -244,7 +241,7 @@ class Layer:
             ingrad += tf.reshape(graph.scratch2[:np.prod(self.inSz)],self.inSz)
 
         bsave += [tf.assign(graph.scratch[:np.prod(self.inSz)],tf.reshape(ingrad,[-1])).op]
-        
+
         if self.nldef.res_in:
             if rchange:
                 bsave += [tf.assign(graph.scratch2[:np.prod(self.inSz)],tf.reshape(ingrad,[-1])).op]
@@ -254,7 +251,7 @@ class Layer:
                 if rstride > 1:
                     ingrad = tf.nn.depthwise_conv2d_native_backprop_input(rsz,reskern,ingrad,[1,rstride,rstride,1],'VALID')
                 bsave += [tf.assign(graph.scratch2[:np.prod(rsz)],tf.reshape(ingrad,[-1])).op]
-        
+
         self.bOp = tf.group(*bsave)
 
 
@@ -288,8 +285,7 @@ class LogLoss:
         self.gOp = tf.group(*gOp)
 
     def get_pred(self,sess):
-        out = sess.run(self.pred)
-        return out
+        return sess.run(self.pred)
 
     def get_loss_ops(self):
         return self.acc,self.loss,self.gOp
@@ -424,9 +420,10 @@ class Graph:
             self.backward(lr)
 
     def save(self,saveloc,niter):
-        wts = {}
-        for k in range(len(self.weights)):
-            wts['%d'%k] = self.weights[k].eval(self.sess)
+        wts = {
+            '%d' % k: self.weights[k].eval(self.sess)
+            for k in range(len(self.weights))
+        }
         wts['niter'] = niter
         np.savez(saveloc,**wts)
 

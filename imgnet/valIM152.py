@@ -23,7 +23,7 @@ saveloc = opts.save
 # Load data
 
 BDIR='/scratch/data/ImageNet/clsloc/'
-val = [f.rstrip().split(',') for f in open(BDIR+'val.txt').readlines()]
+val = [f.rstrip().split(',') for f in open(f'{BDIR}val.txt').readlines()]
 
 val_im = [BDIR+f[0] for f in val]
 val_lb = [int(f[1]) for f in val]
@@ -37,7 +37,9 @@ g = Model(BSZ,4,0.)
 VSIZE = len(val_im)//BSZ
 
 _ = g.load(saveloc)
-vacc1 = 0.; vacc5 = 0.; viter = 0
+vacc1 = 0.
+vacc5 = 0.
+viter = 0
 for b in range(VSIZE):
     b_im = [val_im[i] for i in range(b*BSZ,(b+1)*BSZ)]
     b_lb = [val_lb[i] for i in range(b*BSZ,(b+1)*BSZ)]

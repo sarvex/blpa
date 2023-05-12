@@ -29,7 +29,7 @@ class Graph:
         self.ngpu = ngpu
         self.dL = []
         self.lL = []
-        for i in range(ngpu):
+        for _ in range(ngpu):
             dli = dlayer[0](*dlayer[1])
             lli = llayer[0](*llayer[1])
             self.dL.append(dli)
@@ -44,7 +44,7 @@ class Graph:
         if multi == 1:
             multi = False
         self.multi = multi
-        
+
         for i in range(len(self.graphs)):
             with tf.device('/gpu:%d'%i):
                 self.graphs[i].close(qtype,WD,False,True)
@@ -55,14 +55,14 @@ class Graph:
         self.wg2c = [] # Copy weights from gpu0 to cpu
         self.wc2g = [] # Copy weights from cpu to all gpus
         self.gg2c = [] # Aggregate gradients from all gpus to cpu
-        
+
         g0 = self.graphs[0]
         for l in range(len(g0.weights)):
             shp = g0.weights[l].get_shape()
             with tf.device('/cpu:0'):
                 wl = tf.Variable(tf.zeros(shp))
                 gl = tf.Variable(tf.zeros(shp))
-                
+
             self.weights.append(wl)
             self.grads.append(gl)
 
@@ -72,10 +72,7 @@ class Graph:
                 self.wc2g.append(tf.assign(g.weights[l],wl))
                 gsum.append(g.grads[l])
             gsum = tf.add_n(gsum)
-            if self.multi:
-                gop = tf.assign_add(gl,gsum)
-            else:
-                gop = tf.assign(gl,gsum)
+            gop = tf.assign_add(gl,gsum) if self.multi else tf.assign(gl,gsum)
             self.gg2c.append(gop)
 
         if self.multi:
@@ -126,19 +123,19 @@ class Graph:
     def forward(self,x,y,isxlist=False,isylist=False):
         x = dsplit(x,isxlist,self.ngpu)
         y = dsplit(y,isylist,self.ngpu)
-        
+
         fd = {}
         for i in range(self.ngpu):
-            fd.update(self.dL[i].fd(x[i]))
-        
+            fd |= self.dL[i].fd(x[i])
+
         self.sess.run(self.fops[0],feed_dict=fd)
         for k in range(1,len(self.fops)):
             self.sess.run(self.fops[k])
 
         fd = {}
         for i in range(self.ngpu):
-            fd.update(self.lL[i].get_loss_fd(y[i]))
-            
+            fd |= self.lL[i].get_loss_fd(y[i])
+
         acc,loss,_ = self.sess.run([self.acc,self.loss,self.loss_fb],fd)
         return acc, loss
 
@@ -168,9 +165,10 @@ class Graph:
             self.backward(lr)
             
     def save(self,saveloc,niter):
-        wts = {}
-        for k in range(len(self.weights)):
-            wts['%d'%k] = self.weights[k].eval(self.sess)
+        wts = {
+            '%d' % k: self.weights[k].eval(self.sess)
+            for k in range(len(self.weights))
+        }
         wts['niter'] = niter
         np.savez(saveloc,**wts)
 

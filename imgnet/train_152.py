@@ -43,8 +43,8 @@ saveloc = opts.save
 # Load data
 
 BDIR='/scratch/data/ImageNet/clsloc/'
-train = [f.rstrip().split(',') for f in open(BDIR+'train.txt').readlines()]
-val = [f.rstrip().split(',') for f in open(BDIR+'val.txt').readlines()]
+train = [f.rstrip().split(',') for f in open(f'{BDIR}train.txt').readlines()]
+val = [f.rstrip().split(',') for f in open(f'{BDIR}val.txt').readlines()]
 
 train_im = [BDIR+f[0] for f in train]
 train_lb = [int(f[1]) for f in train]
@@ -66,16 +66,17 @@ rs = np.random.RandomState(0)
 origiter = 0
 if os.path.isfile(saveloc):
     origiter = g.load(saveloc)
-    for k in range( (origiter+ESIZE-1) // ESIZE):
+    for _ in range( (origiter+ESIZE-1) // ESIZE):
         idx = rs.permutation(len(train_im))
-    mprint("Restored to iteration %d" % origiter)    
+    mprint("Restored to iteration %d" % origiter)
 niter = origiter    
-    
 
-avg_loss = 0.; avg_acc = 0.
+
+avg_loss = 0.
+avg_acc = 0.
 while niter < MAXITER+1:
     lr = get_lr(niter)
-    
+
     if niter % VALITER == 0:
         vacc = 0.; vloss = 0.; viter = 0
         for b in range(VSIZE):
@@ -107,9 +108,9 @@ while niter < MAXITER+1:
         avg_loss = avg_loss + loss; avg_acc = avg_acc + acc;
         g.hback()
     g.cback(lr)
-    
+
     niter = niter+1
-    
+
     if niter % DISPITER == 0:
         avg_loss = avg_loss / (DISPITER*opts.split); avg_acc = avg_acc / (DISPITER*opts.split)
         mprint("[%09d] lr=%.2e, Train_Loss = %.3e, Train_Acc = %.4f" % (niter,lr,avg_loss,avg_acc))
